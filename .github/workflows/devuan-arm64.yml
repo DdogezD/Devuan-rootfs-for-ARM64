@@ -1,0 +1,109 @@
+name: Devuan ARM64 Rootfs
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            wget curl ca-certificates gnupg \
+            qemu-user-static binfmt-support \
+            uidmap fakeroot fakechroot \
+            eatmydata tar xz-utils arch-test \
+            dpkg-dev gzip
+
+      - name: Enable QEMU binfmt
+        run: |
+          sudo update-binfmts --enable qemu-aarch64 || true
+
+      - name: Install mmdebstrap
+        run: |
+          MMDEB=$(wget -qO- https://ftp.debian.org/debian/pool/main/m/mmdebstrap/ \
+            | grep -oE 'mmdebstrap_[^"]+_all\.deb' \
+            | sort -V | tail -n1)
+
+          wget https://ftp.debian.org/debian/pool/main/m/mmdebstrap/${MMDEB}
+          sudo dpkg -i ${MMDEB} || sudo apt-get -fy install
+
+      - name: Fetch Devuan keyring dynamically
+        run: |
+          set -e
+
+          BASE="http://deb.devuan.org/merged"
+
+          wget -q ${BASE}/dists/excalibur/main/binary-all/Packages.gz
+          gunzip Packages.gz
+
+          FILE=$(awk '
+            $1=="Filename:" && $2 ~ /devuan-keyring/ {print $2}
+          ' Packages | tail -n1)
+
+          echo "FOUND KEYRING: $FILE"
+
+          wget ${BASE}/${FILE}
+
+          dpkg-deb -x $(basename $FILE) keyring
+
+          ls -R keyring
+
+      - name: Build rootfs with mmdebstrap
+        run: |
+          sudo eatmydata mmdebstrap \
+            --mode=auto \
+            --architectures=arm64 \
+            --skip=check/empty \
+            --keyring=keyring/usr/share/keyrings/devuan-archive-keyring.gpg \
+            --include="\
+              coreutils,\
+              bash,\
+              sudo,\
+              util-linux,\
+              findutils,\
+              grep,\
+              sed,\
+              gawk,\
+              diffutils,\
+              iproute2,\
+              iputils-ping,\
+              procps,\
+              psmisc,\
+              lsof,\
+              curl,\
+              wget,\
+              git,\
+              make,\
+              tar,\
+              gzip,\
+              xz-utils,\
+              file,\
+              nano" \
+            excalibur \
+            rootfs \
+            "deb http://deb.devuan.org/merged excalibur main"
+
+      - name: Clean rootfs
+        run: |
+          sudo rm -rf rootfs/var/lib/apt/lists/* || true
+          sudo rm -rf rootfs/var/cache/apt/* || true
+          sudo find rootfs/var/log -type f -delete || true
+
+      - name: Package rootfs
+        run: |
+          sudo tar --numeric-owner --acls --xattrs \
+            -czf devuan.tar.gz \
+            -C rootfs .
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: devuan-excalibur-arm64-rootfs-${{ github.run_id }}
+          name: Devuan Excalibur ARM64 Rootfs
+          files: devuan.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
