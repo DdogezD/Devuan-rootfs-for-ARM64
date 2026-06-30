@@ -2,6 +2,12 @@ name: Devuan ARM64 Rootfs
 
 on:
   workflow_dispatch:
+    inputs:
+      timezone:
+        description: 'Timezone for rootfs'
+        required: false
+        default: 'Asia/Shanghai'
+        type: string
 
 permissions:
   contents: write
@@ -85,10 +91,172 @@ jobs:
               gzip,\
               xz-utils,\
               file,\
-              nano" \
+              nano,\
+              ca-certificates,\
+              gnupg,\
+              locales,\
+              xfce4,\
+              xfce4-terminal,\
+              mousepad,\
+              menulibre,\
+              thunar-archive-plugin,\
+              dbus,\
+              dbus-daemon,\
+              dbus-system-bus-common,\
+              consolekit,\
+              mesa-utils,\
+              fontconfig,\
+              fonts-dejavu-core,\
+              fonts-noto,\
+              fonts-noto-cjk,\
+              fonts-noto-cjk-extra" \
             excalibur \
             rootfs \
             "deb http://deb.devuan.org/merged excalibur main contrib non-free"
+
+      - name: Apply post-install fixes
+        run: |
+          set -e
+
+          echo "=== Remove problematic packages ==="
+          sudo chroot rootfs apt-get remove -y --purge elogind libpam-elogind 2>/dev/null || true
+          sudo chroot rootfs apt-get remove -y --purge colord xiccd accountsservice 2>/dev/null || true
+          sudo rm -f rootfs/etc/xdg/autostart/xiccd.desktop
+
+          echo "=== Remove pam_elogind from PAM config ==="
+          if [ -f rootfs/etc/pam.d/common-session ]; then
+            sudo sed -i '/pam_elogind\.so/d' rootfs/etc/pam.d/common-session
+          fi
+
+          echo "=== Set timezone ==="
+          sudo ln -sf "/usr/share/zoneinfo/${{ inputs.timezone }}" rootfs/etc/localtime
+
+          echo "=== Fix DNS (no systemd-resolved in chroot) ==="
+          echo "nameserver 8.8.8.8" | sudo tee rootfs/etc/resolv.conf
+
+          echo "=== Fix hosts (add hostname to localhost line) ==="
+          sudo sed -i 's/^127\.0\.0\.1.*localhost/127.0.0.1 localhost/' rootfs/etc/hosts
+
+          echo "=== Disable xfwm4 compositing (llvmpipe GPU) ==="
+          sudo mkdir -p rootfs/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml
+          sudo tee rootfs/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml << 'XFCONF' > /dev/null
+          <?xml version="1.0" encoding="UTF-8"?>
+          <channel name="xfwm4" version="1.0">
+            <property name="general" type="empty">
+              <property name="use_compositing" type="bool" value="false"/>
+            </property>
+          </channel>
+          XFCONF
+
+          echo "=== Disable ConsoleKit D-Bus service (no VT in chroot) ==="
+          sudo mv rootfs/usr/share/dbus-1/system-services/org.freedesktop.ConsoleKit.service \
+                  rootfs/usr/share/dbus-1/system-services/org.freedesktop.ConsoleKit.service.disabled 2>/dev/null || true
+
+          echo "=== Fix notifyd to bypass systemctl ==="
+          if [ -f rootfs/etc/xdg/autostart/xfce4-notifyd.desktop ]; then
+            sudo sed -i 's|^Exec=.*|Exec=/usr/lib/aarch64-linux-gnu/xfce4/notifyd/xfce4-notifyd|' rootfs/etc/xdg/autostart/xfce4-notifyd.desktop
+          fi
+
+          echo "=== Setup locales ==="
+          sudo sed -i 's/^# *en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' rootfs/etc/locale.gen
+          sudo sed -i 's/^# *zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' rootfs/etc/locale.gen
+          sudo chroot rootfs locale-gen
+          echo "LANG=en_US.UTF-8" | sudo tee rootfs/etc/default/locale
+
+          echo "=== CJK font priority (SC over JP for en_US) ==="
+          sudo mkdir -p rootfs/etc/fonts/conf.d
+          sudo tee rootfs/etc/fonts/conf.d/71-fonts-noto-cjk-sc-default.conf << 'FONTCONF' > /dev/null
+          <?xml version="1.0"?>
+          <!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+          <fontconfig>
+            <!-- Default to SC variants when non-CJK language is in use (e.g. en_US) -->
+
+            <match target="pattern">
+              <test name="lang" qual="any">
+                <string>en</string>
+              </test>
+              <test name="family">
+                <string>serif</string>
+              </test>
+              <edit name="family" mode="prepend">
+                <string>Noto Serif CJK SC</string>
+              </edit>
+            </match>
+
+            <match target="pattern">
+              <test name="lang" qual="any">
+                <string>en</string>
+              </test>
+              <test name="family">
+                <string>sans-serif</string>
+              </test>
+              <edit name="family" mode="prepend">
+                <string>Noto Sans CJK SC</string>
+              </edit>
+            </match>
+
+            <match target="pattern">
+              <test name="lang" qual="any">
+                <string>en</string>
+              </test>
+              <test name="family">
+                <string>monospace</string>
+              </test>
+              <edit name="family" mode="prepend">
+                <string>Noto Sans Mono CJK SC</string>
+              </edit>
+            </match>
+
+            <!-- Also handle undetermined (no lang set) -->
+            <match target="pattern">
+              <test name="lang" qual="any">
+                <string>und</string>
+              </test>
+              <test name="family">
+                <string>serif</string>
+              </test>
+              <edit name="family" mode="prepend">
+                <string>Noto Serif CJK SC</string>
+              </edit>
+            </match>
+
+            <match target="pattern">
+              <test name="lang" qual="any">
+                <string>und</string>
+              </test>
+              <test name="family">
+                <string>sans-serif</string>
+              </test>
+              <edit name="family" mode="prepend">
+                <string>Noto Sans CJK SC</string>
+              </edit>
+            </match>
+
+            <match target="pattern">
+              <test name="lang" qual="any">
+                <string>und</string>
+              </test>
+              <test name="family">
+                <string>monospace</string>
+              </test>
+              <edit name="family" mode="prepend">
+                <string>Noto Sans Mono CJK SC</string>
+              </edit>
+            </match>
+          </fontconfig>
+          FONTCONF
+
+      - name: Install JetBrainsMono Nerd Fonts
+        run: |
+          set -e
+          NERD_VERSION=$(curl -s https://api.github.com/repos/ryanoasis/nerd-fonts/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
+          echo "Nerd Fonts version: $NERD_VERSION"
+          NERD_URL="https://github.com/ryanoasis/nerd-fonts/releases/download/${NERD_VERSION}/JetBrainsMono.zip"
+          curl -fsSL -o /tmp/JetBrainsMono.zip "$NERD_URL"
+          sudo mkdir -p rootfs/usr/local/share/fonts/JetBrainsMono
+          sudo unzip -qo /tmp/JetBrainsMono.zip -d rootfs/usr/local/share/fonts/JetBrainsMono/
+          sudo chroot rootfs fc-cache -fv /usr/local/share/fonts/JetBrainsMono 2>/dev/null || true
+          rm -f /tmp/JetBrainsMono.zip
 
       - name: Clean rootfs
         run: |
