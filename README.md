@@ -142,20 +142,6 @@ apt install -y box64-android box86-android libc6:armhf
 > `CONFIG_BINFMT_MISC=y` is required for transparent auto-dispatch. The startup
 > script handles the mount + registration automatically.
 
-### User environment
-
-Append to `~/.profile`:
-
-```sh
-cat >> ~/.profile << 'EOF'
-
-export LC_ALL=zh_CN.UTF-8
-export LANG=zh_CN.UTF-8
-export SAL_FORCEDPI=175
-export WINEDPI=175
-EOF
-```
-
 ## What's included
 
 ### Desktop
