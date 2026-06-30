@@ -94,6 +94,7 @@ jobs:
               nano,\
               ca-certificates,\
               gnupg,\
+              locales,\
               xfce4,\
               xfce4-terminal,\
               mousepad,\
