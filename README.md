@@ -257,7 +257,6 @@ Applied automatically during rootfs construction:
 | Issue | Fix |
 |------|-----|
 | `su` 25s timeout | Remove `elogind` + `pam_elogind.so` from PAM |
-| xfwm4 compositor stalls on llvmpipe | `use_compositing=false` in `/etc/skel/` |
 | `systemctl` timeout | notifyd bypasses `systemctl --user` |
 | DNS timeout (no systemd-resolved) | `/etc/resolv.conf` → `8.8.8.8` |
 | Timezone defaults to UTC | Configurable (default: `Asia/Shanghai`) |
