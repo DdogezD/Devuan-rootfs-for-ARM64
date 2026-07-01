@@ -40,7 +40,7 @@ jobs:
 
           BASE="http://deb.devuan.org/merged"
 
-          wget -q ${BASE}/dists/excalibur/main/binary-all/Packages.gz
+          wget -q ${BASE}/dists/testing/main/binary-all/Packages.gz
           gunzip Packages.gz
 
           FILE=$(awk '
@@ -86,12 +86,9 @@ jobs:
               xz-utils,\
               file,\
               nano" \
-            excalibur \
+            testing \
             rootfs \
-            "deb http://deb.devuan.org/merged excalibur main non-free contrib" \
-            "deb http://deb.devuan.org/merged excalibur-updates main non-free contrib" \
-            "deb http://deb.devuan.org/merged excalibur-security main non-free contrib" \
-            "deb http://deb.devuan.org/merged excalibur-backports main non-free contrib"
+            "deb http://deb.devuan.org/merged testing main non-free contrib"
 
       - name: Clean rootfs
         run: |
@@ -108,8 +105,8 @@ jobs:
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: devuan-excalibur-arm64-rootfs-${{ github.run_id }}
-          name: Devuan Excalibur ARM64 Rootfs
+          tag_name: devuan-testing-arm64-rootfs-${{ github.run_id }}
+          name: Devuan testing ARM64 Rootfs
           files: devuan.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
